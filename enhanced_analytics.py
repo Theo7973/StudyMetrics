@@ -1,35 +1,51 @@
-import plotly.express as px
+﻿import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
 from datetime import datetime, timedelta
+from typing import Tuple, List
 
 class EnhancedAnalytics:
     def __init__(self, db_manager):
         self.db = db_manager
+        self._weekday_order = ['Monday', 'Tuesday', 'Wednesday', 
+                             'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-    def get_study_data(self):
-        """Fetch and prepare study session data."""
+    def get_study_data(self) -> pd.DataFrame:
+        """Fetch and prepare study session data with proper type handling."""
         sessions = self.db.get_all_sessions()
+        
+        if not sessions:
+            return pd.DataFrame()
+            
         df = pd.DataFrame(sessions, columns=[
             'id', 'start_time', 'end_time', 'duration', 
             'subject', 'weather_condition', 'location'
         ])
-        df['start_time'] = pd.to_datetime(df['start_time'])
-        df['end_time'] = pd.to_datetime(df['end_time'])
+        
+        # Convert and validate datetime fields
+        df['start_time'] = pd.to_datetime(df['start_time'], errors='coerce')
+        df['end_time'] = pd.to_datetime(df['end_time'], errors='coerce')
+        
+        # Handle invalid durations
+        df['duration'] = pd.to_numeric(df['duration'], errors='coerce')
         df['duration_hours'] = df['duration'] / 3600
+        
+        # Clean invalid rows
+        df = df.dropna(subset=['start_time', 'duration_hours'])
         return df
 
-    def create_study_trends_plot(self):
-        """Create an interactive study trends visualization."""
+    def create_study_trends_plot(self) -> go.Figure:
+        """Create interactive plot with enhanced features."""
         df = self.get_study_data()
         
-        # Daily aggregation
-        daily_study = df.groupby([
-            df['start_time'].dt.date, 
-            'subject'
-        ])['duration_hours'].sum().reset_index()
-
+        if df.empty:
+            return self._create_empty_figure("No study data available")
+        
+        # Aggregate data
+        daily_study = df.groupby([df['start_time'].dt.date, 'subject'])['duration_hours'].sum().reset_index()
+        
+        # Create base figure
         fig = px.line(
             daily_study, 
             x='start_time', 
@@ -40,79 +56,117 @@ class EnhancedAnalytics:
                 'start_time': 'Date',
                 'duration_hours': 'Hours Studied',
                 'subject': 'Subject'
-            }
+            },
+            hover_data={'subject': True, 'duration_hours': ':.2f'}
         )
         
-        fig.update_layout(
-            hovermode='x unified',
-            legend=dict(
-                yanchor="top",
-                y=0.99,
-                xanchor="left",
-                x=0.01
+        # Add peak session annotations
+        max_sessions = daily_study.loc[daily_study.groupby('subject')['duration_hours'].idxmax()]
+        for _, row in max_sessions.iterrows():
+            fig.add_annotation(
+                x=row['start_time'],
+                y=row['duration_hours'],
+                text=f"Peak {row['subject']}<br>{row['duration_hours']:.1f}h",
+                showarrow=True,
+                arrowhead=1,
+                ax=0,
+                ay=-40
             )
+        
+        # Add interactive elements
+        fig.update_layout(
+            xaxis=dict(
+                rangeselector=dict(
+                    buttons=list([
+                        dict(count=1, label="1d", step="day", stepmode="backward"),
+                        dict(count=7, label="1w", step="day", stepmode="backward"),
+                        dict(count=1, label="1m", step="month", stepmode="backward"),
+                        dict(step="all")
+                    ])
+                ),
+                rangeslider=dict(visible=True),
+                type="date"
+            ),
+            hovermode='x unified',
+            plot_bgcolor='rgba(240,240,240,0.9)'
         )
         
         return fig
 
-    def create_productivity_analysis(self):
-        """Create a comprehensive productivity analysis dashboard."""
+    def create_productivity_analysis(self) -> go.Figure:
+        """Create comprehensive productivity dashboard with enhanced visuals."""
         df = self.get_study_data()
         
-        # Create subplot figure
+        if df.empty:
+            return self._create_empty_figure("No productivity data available")
+        
+        # Prepare data
+        df['hour'] = df['start_time'].dt.hour
+        df['weekday'] = pd.Categorical(
+            df['start_time'].dt.day_name(),
+            categories=self._weekday_order,
+            ordered=True
+        )
+        
+        # Create figure
         fig = make_subplots(
             rows=2, cols=2,
             subplot_titles=(
-                'Study Time Distribution by Subject',
-                'Average Session Duration by Time of Day',
-                'Study Sessions by Weather',
-                'Weekly Study Pattern'
-            )
+                'Subject Time Distribution',
+                'Hourly Productivity Patterns',
+                'Weather Impact Analysis',
+                'Weekly Study Rhythm'
+            ),
+            specs=[[{"type": "pie"}, {"type": "bar"}],
+                   [{"type": "bar"}, {"type": "polar"}]]
         )
         
-        # 1. Subject distribution (pie chart)
-        subject_total = df.groupby('subject')['duration_hours'].sum()
+        # Subject Distribution Pie Chart
+        subject_data = df.groupby('subject', observed=False)['duration_hours'].sum()
         fig.add_trace(
             go.Pie(
-                labels=subject_total.index,
-                values=subject_total.values,
-                showlegend=True
+                labels=subject_data.index,
+                values=subject_data.values,
+                hole=0.4,
+                hoverinfo='label+percent+value',
+                textinfo='percent'
             ),
             row=1, col=1
         )
         
-        # 2. Time of day analysis (bar chart)
-        df['hour'] = df['start_time'].dt.hour
-        hourly_avg = df.groupby('hour')['duration_hours'].mean()
+        # Hourly Productivity Bar Chart
+        hourly_data = df.groupby('hour', observed=False)['duration_hours'].mean()
         fig.add_trace(
             go.Bar(
-                x=hourly_avg.index,
-                y=hourly_avg.values,
-                showlegend=False
+                x=hourly_data.index,
+                y=hourly_data.values,
+                marker_color='#636efa',
+                hoverinfo='x+y'
             ),
             row=1, col=2
         )
         
-        # 3. Weather impact (bar chart)
-        weather_study = df.groupby('weather_condition')['duration_hours'].mean()
+        # Weather Impact Bar Chart
+        weather_data = df.groupby('weather_condition', observed=False)['duration_hours'].mean()
         fig.add_trace(
             go.Bar(
-                x=weather_study.index,
-                y=weather_study.values,
-                showlegend=False
+                x=weather_data.index,
+                y=weather_data.values,
+                marker_color='#00cc96',
+                hoverinfo='x+y'
             ),
             row=2, col=1
         )
         
-        # 4. Weekly pattern (radar chart)
-        df['weekday'] = df['start_time'].dt.day_name()
-        weekly_study = df.groupby('weekday')['duration_hours'].mean()
+        # Weekly Pattern Radar Chart
+        weekly_data = df.groupby('weekday', observed=False)['duration_hours'].mean()
         fig.add_trace(
             go.Scatterpolar(
-                r=weekly_study.values,
-                theta=weekly_study.index,
+                r=weekly_data.values,
+                theta=weekly_data.index,
                 fill='toself',
-                showlegend=False
+                line_color='#ef553b',
+                hoverinfo='theta+r'
             ),
             row=2, col=2
         )
@@ -120,43 +174,85 @@ class EnhancedAnalytics:
         # Update layout
         fig.update_layout(
             height=800,
-            showlegend=True,
-            title_text="Study Productivity Analysis Dashboard"
+            title_text='Productivity Analysis Dashboard',
+            showlegend=False,
+            margin=dict(t=100),
+            annotations=[
+                dict(
+                    text="Hover over elements for details!",
+                    showarrow=False,
+                    xref="paper",
+                    yref="paper",
+                    x=0.5,
+                    y=1.15
+                )
+            ]
         )
         
         return fig
 
-    def generate_insights_report(self):
-        """Generate a text report with key insights."""
+    def generate_insights_report(self) -> Tuple[str, List[str]]:
+        """Generate detailed insights report with statistical analysis."""
         df = self.get_study_data()
         
+        if df.empty:
+            return "No data available for insights", []
+        
         insights = []
+        warnings = []
         
-        # Most productive subject
-        subject_total = df.groupby('subject')['duration_hours'].sum()
-        most_studied = subject_total.idxmax()
+        # Basic statistics
+        total_hours = df['duration_hours'].sum()
+        avg_session = df['duration_hours'].mean()
+        insights.append(f"📊 Total Study Time: {total_hours:.1f} hours")
+        insights.append(f"⏱️ Average Session Duration: {avg_session:.1f} hours")
         
+        # Subject analysis
+        subject_stats = df.groupby('subject')['duration_hours'].agg(['sum', 'count', 'mean'])
+        top_subject = subject_stats['sum'].idxmax()
         insights.append(
-            f"Most studied subject: {most_studied} "
-            f"({subject_total[most_studied]:.1f} hours)"
+            f"🏆 Top Subject: {top_subject} "
+            f"({subject_stats.loc[top_subject, 'sum']:.1f} hours over "
+            f"{subject_stats.loc[top_subject, 'count']} sessions)"
         )
         
-        # Best study time
-        hourly_avg = df.groupby(df['start_time'].dt.hour)['duration_hours'].mean()
-        best_hour = hourly_avg.idxmax()
+        # Time analysis
+        peak_hour = df.groupby(df['start_time'].dt.hour)['duration_hours'].sum().idxmax()
+        insights.append(f"⏰ Peak Productivity Hour: {peak_hour:02d}:00")
         
-        insights.append(
-            f"Most productive hour: {best_hour}:00 "
-            f"(avg: {hourly_avg[best_hour]:.1f} hours)"
+        # Weather analysis
+        if 'weather_condition' in df.columns:
+            weather_impact = df.groupby('weather_condition')['duration_hours'].mean()
+            best_weather = weather_impact.idxmax()
+            insights.append(
+                f"🌤️ Best Studying Weather: {best_weather} "
+                f"(avg {weather_impact[best_weather]:.1f} hours/session)"
+            )
+        
+        # Warnings
+        if (df['duration_hours'] > 8).any():
+            warnings.append("⚠️ Long sessions detected (over 8 hours)! Consider taking more breaks.")
+            
+        if df['subject'].nunique() == 1:
+            warnings.append("⚠️ You're focusing heavily on one subject. Consider diversifying your study topics.")
+        
+        return '\n'.join(insights), warnings
+
+    def _create_empty_figure(self, message: str) -> go.Figure:
+        """Create placeholder figure for empty datasets."""
+        fig = go.Figure()
+        fig.add_annotation(
+            text=message,
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            font=dict(size=20)
         )
-        
-        # Weather impact
-        weather_impact = df.groupby('weather_condition')['duration_hours'].mean()
-        best_weather = weather_impact.idxmax()
-        
-        insights.append(
-            f"Most productive weather: {best_weather} "
-            f"(avg: {weather_impact[best_weather]:.1f} hours)"
+        fig.update_layout(
+            plot_bgcolor='white',
+            xaxis=dict(showgrid=False, zeroline=False, visible=False),
+            yaxis=dict(showgrid=False, zeroline=False, visible=False)
         )
-        
-        return "\n".join(insights)
+        return fig
