@@ -24,6 +24,7 @@
     <Compile Include="analytics.py" />
     <Compile Include="api_service.py" />
     <Compile Include="database.py" />
+    <Compile Include="enhanced_analytics.py" />
     <Compile Include="StudyMetrics.py" />
     <Compile Include="StudyMetricsWeb.py" />
   </ItemGroup>
