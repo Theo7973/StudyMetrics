@@ -127,8 +127,8 @@ def main():
     
     # Force refresh while timer is running
     if st.session_state.running:
-        time.sleep(0.1)  # Small delay to prevent excessive refreshing
-        st.experimental_rerun()
+        time.sleep(0.1) 
+        st.rerun() 
 
 if __name__ == "__main__":
     main()
