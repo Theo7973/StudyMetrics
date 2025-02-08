@@ -1,13 +1,25 @@
 import sqlite3
-from datetime import datetime, timedelta  # Add timedelta import
+from datetime import datetime, timedelta
+import threading
 
 class DatabaseManager:
-    def __init__(self):
-        self.conn = sqlite3.connect('study_sessions.db')
-        self.create_tables()
+    _local = threading.local()
+    
+    def __init__(self, db_file="study_sessions.db"):
+        self.db_file = db_file
+        self._init_db()
 
-    def create_tables(self):
-        cursor = self.conn.cursor()
+    def _get_conn(self):
+        if not hasattr(DatabaseManager._local, "conn"):
+            DatabaseManager._local.conn = sqlite3.connect(
+                self.db_file, 
+                check_same_thread=False
+            )
+        return DatabaseManager._local.conn
+
+    def _init_db(self):
+        conn = self._get_conn()
+        cursor = conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS study_sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,12 +31,12 @@ class DatabaseManager:
                 location TEXT
             )
         ''')
-        self.conn.commit()
+        conn.commit()
 
     def save_session(self, duration, subject, weather="", location=""):
-        cursor = self.conn.cursor()
+        conn = self._get_conn()
+        cursor = conn.cursor()
         end_time = datetime.now()
-        # Convert duration (seconds) to timedelta
         duration_delta = timedelta(seconds=duration)
         start_time = end_time - duration_delta
         
@@ -33,14 +45,16 @@ class DatabaseManager:
             (start_time, end_time, duration, subject, weather_condition, location)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (start_time, end_time, duration, subject, weather, location))
-        self.conn.commit()
+        conn.commit()
 
     def get_all_sessions(self):
-        cursor = self.conn.cursor()
+        conn = self._get_conn()
+        cursor = conn.cursor()
         cursor.execute('SELECT * FROM study_sessions')
         return cursor.fetchall()
 
     def get_total_study_time(self):
-        cursor = self.conn.cursor()
+        conn = self._get_conn()
+        cursor = conn.cursor()
         cursor.execute('SELECT SUM(duration) FROM study_sessions')
         return cursor.fetchone()[0] or 0

@@ -30,6 +30,7 @@
     <Compile Include="StudyMetricsWeb.py" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include=".env" />
     <Content Include="sec.env" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />

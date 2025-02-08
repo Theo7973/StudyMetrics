@@ -1,13 +1,16 @@
 ﻿import streamlit as st
 import time
 from datetime import datetime
+import pandas as pd
+import plotly.express as px
 from database import DatabaseManager
 from api_service import WeatherService
 
 # Page configuration
 st.set_page_config(
     page_title="StudyMetrics",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # Initialize services
@@ -19,7 +22,7 @@ def init_services():
 
 db, weather_service = init_services()
 
-# Initialize session state
+# Session state initialization
 if 'start_time' not in st.session_state:
     st.session_state.start_time = None
 if 'elapsed_time' not in st.session_state:
@@ -63,6 +66,7 @@ def handle_stop(subject):
             weather=weather_condition
         )
         st.success(f"Session saved: {format_time(st.session_state.elapsed_time)}")
+        st.session_state.elapsed_time = 0  # Reset after saving
 
 def handle_reset():
     """Reset timer callback"""
@@ -70,65 +74,88 @@ def handle_reset():
     st.session_state.start_time = None
     st.session_state.elapsed_time = 0
 
+def show_analytics():
+    """Display interactive analytics charts"""
+    st.header("📈 Study Analytics")
+    
+    try:
+        sessions = db.get_all_sessions()
+        if not sessions:
+            st.info("No study sessions recorded yet!")
+            return
+            
+        df = pd.DataFrame(sessions, columns=[
+            "id", "start_time", "end_time", "duration", 
+            "subject", "weather_condition", "location"
+        ])
+        
+        # Convert duration to hours
+        df['duration_hours'] = df['duration'] / 3600
+        
+        # Time Distribution Chart
+        st.subheader("Study Time Distribution")
+        fig1 = px.pie(df, names='subject', values='duration_hours',
+                     title="Time Spent per Subject")
+        st.plotly_chart(fig1, use_container_width=True)
+        
+        # Time Trend Chart
+        st.subheader("Study Time Trend")
+        df['date'] = pd.to_datetime(df['start_time']).dt.date
+        time_series = df.groupby('date')['duration_hours'].sum().reset_index()
+        fig2 = px.line(time_series, x='date', y='duration_hours',
+                      title="Daily Study Time Trend")
+        st.plotly_chart(fig2, use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Error loading analytics: {str(e)}")
+
 def main():
     st.title("📚 StudyMetrics")
     
-    # Timer container
+    # Timer Section
     st.header("⏱️ Study Timer")
     
-    # Subject selection
-    subject = st.selectbox(
-        "Select Subject:",
-        ["General", "Math", "Science", "History", "Language"]
-    )
-    
-    # Timer display
-    st.markdown("""
-        <style>
-        .timer-display {
-            font-size: 4rem;
-            text-align: center;
-            padding: 2rem;
-            background: linear-gradient(45deg, #1e88e5, #1565c0);
-            color: white;
-            border-radius: 15px;
-            margin: 1rem 0;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    # Calculate and display current time
-    current_elapsed = calculate_elapsed_time()
-    st.markdown(
-        f'<div class="timer-display">{format_time(current_elapsed)}</div>',
-        unsafe_allow_html=True
-    )
-    
-    # Control buttons
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns([2, 1])
     with col1:
-        if not st.session_state.running:
-            if st.button("▶️ Start", key="start"):
-                handle_start()
-        else:
-            if st.button("⏸️ Stop", key="stop"):
-                handle_stop(subject)
+        subject = st.selectbox(
+            "Select Subject:",
+            ["General", "Math", "Science", "History", "Language"],
+            key="subject_select"
+        )
+        
+        current_elapsed = calculate_elapsed_time()
+        st.markdown(f"""
+            <div style="text-align: center; padding: 2rem; 
+                      background: #1e88e5; color: white; 
+                      border-radius: 15px; font-size: 2.5rem;">
+                {format_time(current_elapsed)}
+            </div>
+        """, unsafe_allow_html=True)
+        
+        control_col1, control_col2 = st.columns(2)
+        with control_col1:
+            if not st.session_state.running:
+                if st.button("▶️ Start Session", key="start", use_container_width=True):
+                    handle_start()
+            else:
+                if st.button("⏹️ Stop Session", key="stop", type="primary", use_container_width=True):
+                    handle_stop(subject)
+        
+        with control_col2:
+            if st.button("🔄 Reset Timer", key="reset", use_container_width=True):
+                handle_reset()
     
     with col2:
-        if st.button("🔄 Reset", key="reset"):
-            handle_reset()
+        st.subheader("Current Weather")
+        weather_data = weather_service.get_weather()
+        if weather_data:
+            st.metric(label="Temperature", value=f"{weather_data['temperature']}°C")
+            st.metric(label="Condition", value=weather_data['condition'])
+        else:
+            st.warning("Weather service unavailable")
     
-    # Weather display
-    weather_data = weather_service.get_weather()
-    if weather_data:
-        st.sidebar.markdown("### Current Weather")
-        st.sidebar.write(f"🌡️ {weather_data['temperature']}°C")
-        st.sidebar.write(f"☁️ {weather_data['condition']}")
-    
-    # Force refresh while timer is running
-    if st.session_state.running:
-        time.sleep(0.1) 
-        st.rerun() 
+    # Analytics Section
+    show_analytics()
 
 if __name__ == "__main__":
     main()
