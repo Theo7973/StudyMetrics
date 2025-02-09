@@ -6,23 +6,17 @@ import plotly.express as px
 from database import DatabaseManager
 from api_service import WeatherService
 
-# Page configuration
+# Performance optimization for Streamlit
 st.set_page_config(
     page_title="StudyMetrics",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Initialize services with error handling
+# Initialize services with caching
 @st.cache_resource
 def init_services():
-    try:
-        db = DatabaseManager()
-        weather_service = WeatherService()
-        return db, weather_service
-    except Exception as e:
-        st.error(f"Error initializing services: {str(e)}")
-        return None, None
+    return DatabaseManager(), WeatherService()
 
 db, weather_service = init_services()
 
@@ -33,124 +27,73 @@ if 'elapsed_time' not in st.session_state:
     st.session_state.elapsed_time = 0
 if 'running' not in st.session_state:
     st.session_state.running = False
+if 'last_weather_update' not in st.session_state:
+    st.session_state.last_weather_update = 0
+if 'weather_data' not in st.session_state:
+    st.session_state.weather_data = None
 
 def format_time(seconds):
-    """Format seconds into HH:MM:SS"""
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     seconds = int(seconds % 60)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
-def calculate_elapsed_time():
-    """Calculate elapsed time based on start_time"""
-    if st.session_state.running and st.session_state.start_time is not None:
-        current_time = time.time()
-        return st.session_state.elapsed_time + (current_time - st.session_state.start_time)
-    return st.session_state.elapsed_time
+def update_weather():
+    current_time = time.time()
+    # Update weather every 5 minutes
+    if (current_time - st.session_state.last_weather_update) > 300:
+        st.session_state.weather_data = weather_service.get_weather()
+        st.session_state.last_weather_update = current_time
+    return st.session_state.weather_data
 
 def handle_start():
-    """Start timer callback"""
     st.session_state.running = True
     st.session_state.start_time = time.time()
 
 def handle_stop(subject):
-    """Stop timer callback"""
     if st.session_state.running:
-        current_time = time.time()
-        st.session_state.elapsed_time += (current_time - st.session_state.start_time)
+        final_time = st.session_state.elapsed_time
         st.session_state.running = False
         st.session_state.start_time = None
+        st.session_state.elapsed_time = 0
         
         try:
-            # Save session with error handling
-            weather_data = weather_service.get_weather()
-            weather_condition = weather_data.get('condition', 'Unknown')
+            weather_data = update_weather()
+            weather_condition = weather_data.get('condition', 'Unknown') if weather_data else 'Unknown'
             db.save_session(
-                duration=int(st.session_state.elapsed_time),
+                duration=int(final_time),
                 subject=subject,
                 weather=weather_condition
             )
-            st.success(f"Session saved: {format_time(st.session_state.elapsed_time)}")
-            st.session_state.elapsed_time = 0  # Reset after saving
+            st.success(f"Session saved: {format_time(final_time)}")
         except Exception as e:
             st.error(f"Error saving session: {str(e)}")
 
 def handle_reset():
-    """Reset timer callback"""
     st.session_state.running = False
     st.session_state.start_time = None
     st.session_state.elapsed_time = 0
 
-def show_analytics():
-    """Display interactive analytics charts"""
-    st.header("📈 Study Analytics")
-    
-    try:
-        sessions = db.get_all_sessions()
-        if not sessions:
-            st.info("No study sessions recorded yet!")
-            return
-            
-        df = pd.DataFrame(sessions, columns=[
-            "id", "start_time", "end_time", "duration", 
-            "subject", "weather_condition", "location"
-        ])
+@st.cache_data(ttl=300)  # Cache analytics for 5 minutes
+def get_analytics_data():
+    sessions = db.get_all_sessions()
+    if not sessions:
+        return None
         
-        # Convert duration to hours
-        df['duration_hours'] = df['duration'] / 3600
-        
-        # Time Distribution Chart
-        st.subheader("Study Time Distribution")
-        fig1 = px.pie(
-            df, 
-            names='subject', 
-            values='duration_hours',
-            title="Time Spent per Subject",
-            color_discrete_sequence=px.colors.qualitative.Set3
-        )
-        st.plotly_chart(fig1, use_container_width=True)
-        
-        # Time Trend Chart
-        st.subheader("Study Time Trend")
-        df['date'] = pd.to_datetime(df['start_time']).dt.date
-        time_series = df.groupby('date')['duration_hours'].sum().reset_index()
-        fig2 = px.line(
-            time_series, 
-            x='date', 
-            y='duration_hours',
-            title="Daily Study Time Trend",
-            labels={'duration_hours': 'Hours Studied', 'date': 'Date'}
-        )
-        fig2.update_traces(line_color='#1e88e5')
-        st.plotly_chart(fig2, use_container_width=True)
-        
-        # Additional Statistics
-        st.subheader("📊 Study Statistics")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            total_hours = df['duration_hours'].sum()
-            st.metric("Total Study Hours", f"{total_hours:.1f}")
-        with col2:
-            total_sessions = len(df)
-            st.metric("Total Sessions", total_sessions)
-        with col3:
-            avg_session = df['duration_hours'].mean()
-            st.metric("Average Session (hours)", f"{avg_session:.1f}")
-        
-    except Exception as e:
-        st.error(f"Error loading analytics: {str(e)}")
+    df = pd.DataFrame(sessions, columns=[
+        "id", "start_time", "end_time", "duration", 
+        "subject", "weather_condition", "location"
+    ])
+    df['duration_hours'] = df['duration'] / 3600
+    df['date'] = pd.to_datetime(df['start_time']).dt.date
+    return df
 
 def main():
-    if db is None or weather_service is None:
-        st.error("Failed to initialize services. Please check the configuration.")
-        return
-
     st.title("📚 StudyMetrics")
     
     # Timer Section
-    st.header("⏱️ Study Timer")
-    
     col1, col2 = st.columns([2, 1])
+    
     with col1:
         subject = st.selectbox(
             "Select Subject:",
@@ -158,40 +101,87 @@ def main():
             key="subject_select"
         )
         
-        current_elapsed = calculate_elapsed_time()
-        st.markdown(f"""
+        # Update timer
+        if st.session_state.running:
+            current_time = time.time()
+            st.session_state.elapsed_time = (current_time - st.session_state.start_time)
+        
+        time_placeholder = st.empty()
+        time_placeholder.markdown(f"""
             <div style="text-align: center; padding: 2rem; 
                       background: #1e88e5; color: white; 
                       border-radius: 15px; font-size: 2.5rem;">
-                {format_time(current_elapsed)}
+                {format_time(st.session_state.elapsed_time)}
             </div>
         """, unsafe_allow_html=True)
         
-        control_col1, control_col2 = st.columns(2)
-        with control_col1:
+        # Controls
+        col3, col4 = st.columns(2)
+        with col3:
             if not st.session_state.running:
-                if st.button("▶️ Start Session", key="start", use_container_width=True):
+                if st.button("▶️ Start", key="start", use_container_width=True):
                     handle_start()
             else:
-                if st.button("⏹️ Stop Session", key="stop", type="primary", use_container_width=True):
+                if st.button("⏹️ Stop", key="stop", type="primary", use_container_width=True):
                     handle_stop(subject)
         
-        with control_col2:
-            if st.button("🔄 Reset Timer", key="reset", use_container_width=True):
+        with col4:
+            if st.button("🔄 Reset", key="reset", use_container_width=True):
                 handle_reset()
     
+    # Weather Section
     with col2:
         st.subheader("Current Weather")
-        weather_data = weather_service.get_weather()
+        weather_data = update_weather()
         if weather_data:
-            st.metric(label="Temperature", value=f"{weather_data['temperature']}°C")
-            st.metric(label="Condition", value=weather_data['condition'])
-            st.metric(label="Humidity", value=f"{weather_data['humidity']}%")
-        else:
-            st.warning("Weather service unavailable")
+            st.metric("Temperature", f"{weather_data['temperature']}°C")
+            st.metric("Condition", weather_data['condition'])
+            st.metric("Humidity", f"{weather_data['humidity']}%")
     
     # Analytics Section
-    show_analytics()
+    st.header("📈 Study Analytics")
+    df = get_analytics_data()
+    
+    if df is not None:
+        # Summary metrics
+        total_hours = df['duration_hours'].sum()
+        total_sessions = len(df)
+        avg_duration = df['duration_hours'].mean()
+        
+        metrics_cols = st.columns(3)
+        metrics_cols[0].metric("Total Hours", f"{total_hours:.1f}")
+        metrics_cols[1].metric("Sessions", total_sessions)
+        metrics_cols[2].metric("Avg Duration", f"{avg_duration:.1f}h")
+        
+        # Charts
+        chart_cols = st.columns(2)
+        with chart_cols[0]:
+            fig1 = px.pie(
+                df, 
+                names='subject', 
+                values='duration_hours',
+                title="Study Time Distribution",
+                color_discrete_sequence=px.colors.qualitative.Set3
+            )
+            st.plotly_chart(fig1, use_container_width=True)
+        
+        with chart_cols[1]:
+            daily_data = df.groupby('date')['duration_hours'].sum().reset_index()
+            fig2 = px.line(
+                daily_data, 
+                x='date', 
+                y='duration_hours',
+                title="Daily Study Hours",
+                labels={'duration_hours': 'Hours', 'date': 'Date'}
+            )
+            fig2.update_traces(line_color='#1e88e5')
+            st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.info("No study sessions recorded yet!")
 
 if __name__ == "__main__":
     main()
+    # Enable automatic refreshing for the timer
+    if st.session_state.running:
+        time.sleep(0.1)  # Small delay to prevent excessive updates
+        st.experimental_rerun()
