@@ -91,6 +91,9 @@ def get_analytics_data():
 def main():
     st.title("📚 StudyMetrics")
     
+    # Create a placeholder for the timer display
+    timer_placeholder = st.empty()
+    
     # Timer Section
     col1, col2 = st.columns([2, 1])
     
@@ -101,13 +104,12 @@ def main():
             key="subject_select"
         )
         
-        # Update timer
-        if st.session_state.running:
-            current_time = time.time()
-            st.session_state.elapsed_time = (current_time - st.session_state.start_time)
+        # Update timer if running
+        if st.session_state.running and st.session_state.start_time is not None:
+            st.session_state.elapsed_time = time.time() - st.session_state.start_time
         
-        time_placeholder = st.empty()
-        time_placeholder.markdown(f"""
+        # Display timer
+        timer_placeholder.markdown(f"""
             <div style="text-align: center; padding: 2rem; 
                       background: #1e88e5; color: white; 
                       border-radius: 15px; font-size: 2.5rem;">
@@ -179,9 +181,9 @@ def main():
     else:
         st.info("No study sessions recorded yet!")
 
+    # Auto-refresh for timer
+    if st.session_state.running:
+        st.rerun()
+
 if __name__ == "__main__":
     main()
-    # Enable automatic refreshing for the timer
-    if st.session_state.running:
-        time.sleep(0.1)  # Small delay to prevent excessive updates
-        st.experimental_rerun()
