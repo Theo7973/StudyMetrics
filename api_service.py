@@ -9,43 +9,41 @@ class WeatherService:
         self._last_weather = None
         self._last_update = 0
         
-    def get_weather(self, city="London"):
-        """Get current weather with improved error handling and caching"""
+    def get_weather(self, city="Orlando,FL,US"):  # Default to Orlando, Florida
         try:
             current_time = time.time()
             
-            # Return cached data if it's less than 5 minutes old
-            if self._last_weather and (current_time - self._last_update) < 300:
+            # Return cached data if it's less than 2 minutes old
+            if self._last_weather and (current_time - self._last_update) < 120:
                 return self._last_weather
                 
             params = {
                 "q": city,
                 "appid": self.api_key,
-                "units": "metric"  # Use metric units
+                "units": "imperial"  # Use Fahrenheit for US
             }
             
             response = requests.get(
                 self.base_url,
                 params=params,
-                timeout=5  # Add timeout
+                timeout=3  # Reduced timeout
             )
             
             if response.status_code == 200:
                 data = response.json()
                 weather_data = {
-                    "temperature": round(data['main']['temp'], 1),
+                    "temperature": round(data['main']['temp']),  # Fahrenheit
                     "condition": data['weather'][0]['main'],
                     "humidity": data['main']['humidity'],
-                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                    "feels_like": round(data['main']['feels_like']),
+                    "location": "Florida"
                 }
                 
-                # Cache the results
                 self._last_weather = weather_data
                 self._last_update = current_time
                 
                 return weather_data
             else:
-                print(f"Weather API error: {response.status_code}")
                 return self._last_weather if self._last_weather else self._get_default_weather()
                 
         except Exception as e:
@@ -53,10 +51,10 @@ class WeatherService:
             return self._last_weather if self._last_weather else self._get_default_weather()
     
     def _get_default_weather(self):
-        """Return default weather data"""
         return {
-            "temperature": 20,
+            "temperature": 75,  # Default Florida temperature in Fahrenheit
             "condition": "Unknown",
-            "humidity": 50,
-            "timestamp": datetime.now().strftime("%H:%M:%S")
+            "humidity": 70,  # Default Florida humidity
+            "feels_like": 78,
+            "location": "Florida"
         }
