@@ -13,12 +13,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize services
+# Initialize services with error handling
 @st.cache_resource
 def init_services():
-    db = DatabaseManager()
-    weather_service = WeatherService()
-    return db, weather_service
+    try:
+        db = DatabaseManager()
+        weather_service = WeatherService()
+        return db, weather_service
+    except Exception as e:
+        st.error(f"Error initializing services: {str(e)}")
+        return None, None
 
 db, weather_service = init_services()
 
@@ -57,16 +61,19 @@ def handle_stop(subject):
         st.session_state.running = False
         st.session_state.start_time = None
         
-        # Save session
-        weather_data = weather_service.get_weather()
-        weather_condition = weather_data['condition'] if weather_data else "Unknown"
-        db.save_session(
-            duration=int(st.session_state.elapsed_time),
-            subject=subject,
-            weather=weather_condition
-        )
-        st.success(f"Session saved: {format_time(st.session_state.elapsed_time)}")
-        st.session_state.elapsed_time = 0  # Reset after saving
+        try:
+            # Save session with error handling
+            weather_data = weather_service.get_weather()
+            weather_condition = weather_data.get('condition', 'Unknown')
+            db.save_session(
+                duration=int(st.session_state.elapsed_time),
+                subject=subject,
+                weather=weather_condition
+            )
+            st.success(f"Session saved: {format_time(st.session_state.elapsed_time)}")
+            st.session_state.elapsed_time = 0  # Reset after saving
+        except Exception as e:
+            st.error(f"Error saving session: {str(e)}")
 
 def handle_reset():
     """Reset timer callback"""
@@ -94,22 +101,50 @@ def show_analytics():
         
         # Time Distribution Chart
         st.subheader("Study Time Distribution")
-        fig1 = px.pie(df, names='subject', values='duration_hours',
-                     title="Time Spent per Subject")
+        fig1 = px.pie(
+            df, 
+            names='subject', 
+            values='duration_hours',
+            title="Time Spent per Subject",
+            color_discrete_sequence=px.colors.qualitative.Set3
+        )
         st.plotly_chart(fig1, use_container_width=True)
         
         # Time Trend Chart
         st.subheader("Study Time Trend")
         df['date'] = pd.to_datetime(df['start_time']).dt.date
         time_series = df.groupby('date')['duration_hours'].sum().reset_index()
-        fig2 = px.line(time_series, x='date', y='duration_hours',
-                      title="Daily Study Time Trend")
+        fig2 = px.line(
+            time_series, 
+            x='date', 
+            y='duration_hours',
+            title="Daily Study Time Trend",
+            labels={'duration_hours': 'Hours Studied', 'date': 'Date'}
+        )
+        fig2.update_traces(line_color='#1e88e5')
         st.plotly_chart(fig2, use_container_width=True)
+        
+        # Additional Statistics
+        st.subheader("📊 Study Statistics")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            total_hours = df['duration_hours'].sum()
+            st.metric("Total Study Hours", f"{total_hours:.1f}")
+        with col2:
+            total_sessions = len(df)
+            st.metric("Total Sessions", total_sessions)
+        with col3:
+            avg_session = df['duration_hours'].mean()
+            st.metric("Average Session (hours)", f"{avg_session:.1f}")
         
     except Exception as e:
         st.error(f"Error loading analytics: {str(e)}")
 
 def main():
+    if db is None or weather_service is None:
+        st.error("Failed to initialize services. Please check the configuration.")
+        return
+
     st.title("📚 StudyMetrics")
     
     # Timer Section
@@ -151,6 +186,7 @@ def main():
         if weather_data:
             st.metric(label="Temperature", value=f"{weather_data['temperature']}°C")
             st.metric(label="Condition", value=weather_data['condition'])
+            st.metric(label="Humidity", value=f"{weather_data['humidity']}%")
         else:
             st.warning("Weather service unavailable")
     
