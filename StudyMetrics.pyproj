@@ -28,6 +28,7 @@
     <Compile Include="enhanced_analytics.py" />
     <Compile Include="StudyMetrics.py" />
     <Compile Include="StudyMetricsWeb.py" />
+    <Compile Include="study_timer.py" />
   </ItemGroup>
   <ItemGroup>
     <Content Include=".env" />
