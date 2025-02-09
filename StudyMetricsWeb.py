@@ -40,7 +40,6 @@ def format_time(seconds):
 
 def update_weather():
     current_time = time.time()
-    # Update weather every 5 minutes
     if (current_time - st.session_state.last_weather_update) > 300:
         st.session_state.weather_data = weather_service.get_weather()
         st.session_state.last_weather_update = current_time
@@ -74,7 +73,7 @@ def handle_reset():
     st.session_state.start_time = None
     st.session_state.elapsed_time = 0
 
-@st.cache_data(ttl=300)  # Cache analytics for 5 minutes
+@st.cache_data(ttl=300)
 def get_analytics_data():
     sessions = db.get_all_sessions()
     if not sessions:
@@ -91,9 +90,6 @@ def get_analytics_data():
 def main():
     st.title("📚 StudyMetrics")
     
-    # Create a placeholder for the timer display
-    timer_placeholder = st.empty()
-    
     # Timer Section
     col1, col2 = st.columns([2, 1])
     
@@ -104,31 +100,35 @@ def main():
             key="subject_select"
         )
         
-        # Update timer if running
-        if st.session_state.running and st.session_state.start_time is not None:
-            st.session_state.elapsed_time = time.time() - st.session_state.start_time
-        
-        # Display timer
-        timer_placeholder.markdown(f"""
-            <div style="text-align: center; padding: 2rem; 
-                      background: #1e88e5; color: white; 
-                      border-radius: 15px; font-size: 2.5rem;">
-                {format_time(st.session_state.elapsed_time)}
-            </div>
-        """, unsafe_allow_html=True)
+        # Update timer using a container for smooth updates
+        timer_container = st.container()
+        with timer_container:
+            if st.session_state.running and st.session_state.start_time is not None:
+                st.session_state.elapsed_time = time.time() - st.session_state.start_time
+            
+            st.markdown(f"""
+                <div style="text-align: center; padding: 2rem; 
+                          background: #1e88e5; color: white; 
+                          border-radius: 15px; font-size: 2.5rem;">
+                    {format_time(st.session_state.elapsed_time)}
+                </div>
+            """, unsafe_allow_html=True)
         
         # Controls
         col3, col4 = st.columns(2)
         with col3:
             if not st.session_state.running:
-                if st.button("▶️ Start", key="start", use_container_width=True):
+                start_button = st.button("▶️ Start", key="start", use_container_width=True)
+                if start_button:
                     handle_start()
             else:
-                if st.button("⏹️ Stop", key="stop", type="primary", use_container_width=True):
+                stop_button = st.button("⏹️ Stop", key="stop", type="primary", use_container_width=True)
+                if stop_button:
                     handle_stop(subject)
         
         with col4:
-            if st.button("🔄 Reset", key="reset", use_container_width=True):
+            reset_button = st.button("🔄 Reset", key="reset", use_container_width=True)
+            if reset_button:
                 handle_reset()
     
     # Weather Section
@@ -181,9 +181,10 @@ def main():
     else:
         st.info("No study sessions recorded yet!")
 
-    # Auto-refresh for timer
+    # Auto-refresh the page when timer is running
     if st.session_state.running:
-        st.rerun()
+        time.sleep(0.1)  # Small delay to prevent excessive updates
+        st.empty().markdown("")  # Trigger a rerun
 
 if __name__ == "__main__":
     main()
