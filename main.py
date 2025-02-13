@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
+from plotly.backends.backend_tkagg import FigureCanvasTkAgg
+
 import plotly.graph_objects as go
 from database import DatabaseManager
 from api_service import WeatherService
@@ -183,20 +186,41 @@ class StudyTimer:
         ).pack(side=tk.LEFT, padx=2)
 
     def create_analytics_display(self, parent):
-        notebook = ttk.Notebook(parent)
-        notebook.pack(fill=tk.BOTH, expand=True)
+     notebook = ttk.Notebook(parent)
+     notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Trend Analysis Tab
-        trend_frame = ttk.Frame(notebook)
-        self.trend_figure = go.FigureWidget(self.analytics.create_study_trends_plot())
-        self.trend_figure.show()
-        notebook.add(trend_frame, text="Study Trends")
+    # Trend Analysis Tab
+     trend_frame = ttk.Frame(notebook)
+     trend_fig = self.analytics.create_study_trends_plot()
+     trend_canvas = FigureCanvasTkAgg(trend_fig, master=trend_frame)
+     trend_canvas.draw()
+     trend_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+     notebook.add(trend_frame, text="Study Trends")
 
-        # Productivity Dashboard Tab
-        dashboard_frame = ttk.Frame(notebook)
-        self.dashboard_figure = go.FigureWidget(self.analytics.create_productivity_dashboard())
-        self.dashboard_figure.show()
-        notebook.add(dashboard_frame, text="Productivity Dashboard")
+    # Productivity Dashboard Tab
+     dashboard_frame = ttk.Frame(notebook)
+     dashboard_fig = self.analytics.create_productivity_dashboard()
+     dashboard_canvas = FigureCanvasTkAgg(dashboard_fig, master=dashboard_frame)
+     dashboard_canvas.draw()
+     dashboard_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+     notebook.add(dashboard_frame, text="Productivity Dashboard")
+
+    # Refresh button
+     refresh_btn = ttk.Button(
+        parent,
+        text="Refresh Dashboards",
+        command=self.update_dashboards
+    )
+     refresh_btn.pack(pady=10)
+
+def update_dashboards(self):
+    # Destroy old canvases
+    for frame in [self.trend_frame, self.dashboard_frame]:
+        for widget in frame.winfo_children():
+            widget.destroy()
+    
+    # Redraw updated figures
+    self.create_analytics_display(self.right_panel)
 
     def load_initial_values(self):
         goals = self.db.get_current_goals()
