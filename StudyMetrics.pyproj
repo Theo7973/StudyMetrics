@@ -4,7 +4,8 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>9dbf0043-65c3-4875-b8dd-3b5b75895c91</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>StudyMetrics.py</StartupFile>
+    <StartupFile>
+    </StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -24,15 +25,9 @@
     <Compile Include="analytics.py" />
     <Compile Include="api_service.py" />
     <Compile Include="database.py" />
-    <Compile Include="data_utils.py" />
-    <Compile Include="enhanced_analytics.py" />
-    <Compile Include="StudyMetrics.py" />
-    <Compile Include="StudyMetricsWeb.py" />
-    <Compile Include="study_timer.py" />
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include=".env" />
-    <Content Include="sec.env" />
+    <Compile Include="data_exporter.py" />
+    <Compile Include="error_handler.py" />
+    <Compile Include="main.py" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in
