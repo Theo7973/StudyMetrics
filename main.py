@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
-from plotly.backends.backend_tkagg import FigureCanvasTkAgg
 
+# Corrected Plotly imports
+from plotly.backends.backend_tkagg import FigureCanvasTkAgg
 import plotly.graph_objects as go
+
+# Local imports
 from database import DatabaseManager
 from api_service import WeatherService
 from analytics import EnhancedAnalytics
 from data_exporter import DataExporter
 from error_handler import validate_study_session, ValidationError
-
 class StudyTimer:
     def __init__(self, root):
         self.root = root
@@ -205,12 +206,16 @@ class StudyTimer:
      dashboard_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
      notebook.add(dashboard_frame, text="Productivity Dashboard")
 
+    # Store references
+     self.trend_frame = trend_frame
+     self.dashboard_frame = dashboard_frame
+
     # Refresh button
      refresh_btn = ttk.Button(
-        parent,
+         parent,
         text="Refresh Dashboards",
         command=self.update_dashboards
-    )
+     )
      refresh_btn.pack(pady=10)
 
 def update_dashboards(self):
