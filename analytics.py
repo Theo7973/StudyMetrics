@@ -1,6 +1,5 @@
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 import pandas as pd
 from datetime import datetime
 
@@ -35,31 +34,23 @@ class EnhancedAnalytics:
         df['date'] = df['start_time'].dt.date
         daily_study = df.groupby(['date', 'subject'])['duration_hours'].sum().reset_index()
         
-        fig = px.line(
-            daily_study, 
-            x='date',
-            y='duration_hours',
-            color='subject',
-            title='Study Hours Trend',
-            labels={'date': 'Date', 'duration_hours': 'Hours Studied'},
-            markers=True
-        )
+        # Create matplotlib figure
+        fig = Figure(figsize=(10, 6))
+        ax = fig.add_subplot(111)
         
-        fig.update_layout(
-            hovermode='x unified',
-            plot_bgcolor='rgba(240,240,240,0.9)',
-            xaxis=dict(
-                rangeselector=dict(
-                    buttons=list([
-                        dict(count=1, label="1d", step="day", stepmode="backward"),
-                        dict(count=7, label="1w", step="day", stepmode="backward"),
-                        dict(count=1, label="1m", step="month", stepmode="backward"),
-                        dict(step="all")
-                    ])
-                ),
-                type="date"
-            )
-        )
+        # Plot lines for each subject
+        for subject in daily_study['subject'].unique():
+            subject_data = daily_study[daily_study['subject'] == subject]
+            ax.plot(subject_data['date'], subject_data['duration_hours'], 
+                   marker='o', label=subject)
+        
+        ax.set_title('Study Hours Trend')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Hours Studied')
+        ax.legend()
+        ax.grid(True)
+        
+        fig.tight_layout()
         return fig
 
     def create_productivity_dashboard(self):
@@ -67,71 +58,58 @@ class EnhancedAnalytics:
         if df.empty:
             return self._create_empty_figure("No productivity data available")
         
-        # Create subplots with proper layout
-        fig = make_subplots(
-            rows=2, cols=2,
-            subplot_titles=(
-                'Subject Distribution',
-                'Hourly Productivity',
-                'Weather Impact',
-                'Weekly Pattern'
-            ),
-            specs=[[{"type": "pie"}, {"type": "bar"}],
-                   [{"type": "bar"}, {"type": "polar"}]]
-        )
-
-        # Subject Distribution
+        # Create figure with subplots
+        fig = Figure(figsize=(12, 8))
+        
+        # Subject Distribution (Pie Chart)
+        ax1 = fig.add_subplot(221)
         subject_data = df.groupby('subject')['duration_hours'].sum()
-        fig.add_trace(
-            go.Pie(labels=subject_data.index, values=subject_data.values),
-            row=1, col=1
-        )
+        ax1.pie(subject_data.values, labels=subject_data.index, autopct='%1.1f%%')
+        ax1.set_title('Subject Distribution')
 
-        # Hourly Productivity
+        # Hourly Productivity (Bar Chart)
+        ax2 = fig.add_subplot(222)
         df['hour'] = df['start_time'].dt.hour
         hourly_data = df.groupby('hour')['duration_hours'].mean()
-        fig.add_trace(
-            go.Bar(x=hourly_data.index, y=hourly_data.values),
-            row=1, col=2
-        )
+        ax2.bar(hourly_data.index, hourly_data.values)
+        ax2.set_title('Hourly Productivity')
+        ax2.set_xlabel('Hour of Day')
+        ax2.set_ylabel('Average Hours')
 
-        # Weather Impact
+        # Weather Impact (Bar Chart)
+        ax3 = fig.add_subplot(223)
         weather_data = df.groupby('weather_condition')['duration_hours'].mean()
-        fig.add_trace(
-            go.Bar(x=weather_data.index, y=weather_data.values),
-            row=2, col=1
-        )
+        ax3.bar(weather_data.index, weather_data.values)
+        ax3.set_title('Weather Impact')
+        ax3.set_xlabel('Weather')
+        ax3.set_ylabel('Average Hours')
+        plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45)
 
-        # Weekly Pattern
+        # Weekly Pattern (Polar Plot)
+        ax4 = fig.add_subplot(224, projection='polar')
         df['weekday'] = pd.Categorical(
             df['start_time'].dt.day_name(),
             categories=self._weekday_order,
             ordered=True
         )
         weekly_data = df.groupby('weekday')['duration_hours'].mean()
-        fig.add_trace(
-            go.Scatterpolar(
-                r=weekly_data.values,
-                theta=weekly_data.index,
-                fill='toself'
-            ),
-            row=2, col=2
-        )
+        angles = [i/float(len(self._weekday_order))*2*3.14159 for i in range(len(self._weekday_order))]
+        angles += angles[:1]  # complete the circle
+        values = weekly_data.values.tolist()
+        values += values[:1]  # complete the circle
+        ax4.plot(angles, values)
+        ax4.set_xticks(angles[:-1])
+        ax4.set_xticklabels(self._weekday_order)
+        ax4.set_title('Weekly Pattern')
 
-        fig.update_layout(
-            height=800,
-            title_text='Productivity Dashboard',
-            showlegend=False
-        )
+        fig.tight_layout()
         return fig
 
     def _create_empty_figure(self, message):
-        fig = go.Figure()
-        fig.add_annotation(
-            text=message,
-            xref="paper", yref="paper",
-            x=0.5, y=0.5,
-            showarrow=False,
-            font=dict(size=20)
-        )
+        fig = Figure(figsize=(6, 4))
+        ax = fig.add_subplot(111)
+        ax.text(0.5, 0.5, message, horizontalalignment='center',
+                verticalalignment='center', transform=ax.transAxes)
+        ax.set_xticks([])
+        ax.set_yticks([])
         return fig

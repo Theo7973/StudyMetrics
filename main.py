@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
+import matplotlib
+matplotlib.use('TkAgg')  # Set backend before other imports
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
-
-# Corrected Plotly imports
-from plotly.backends.backend_tkagg import FigureCanvasTkAgg
-import plotly.graph_objects as go
-
-# Local imports
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
 from database import DatabaseManager
 from api_service import WeatherService
 from analytics import EnhancedAnalytics
 from data_exporter import DataExporter
 from error_handler import validate_study_session, ValidationError
+
 class StudyTimer:
     def __init__(self, root):
         self.root = root
@@ -31,11 +31,18 @@ class StudyTimer:
         self.timer_running = False
         self.current_weather = None
 
+        # UI Components
+        self.trend_fig = None
+        self.trend_canvas = None
+        self.dashboard_fig = None
+        self.dashboard_canvas = None
+        self.trend_frame = None
+        self.dashboard_frame = None
+
         # Setup UI
         self.create_widgets()
         self.load_initial_values()
         self.update_weather()
-        self.update_dashboard()
 
     def create_widgets(self):
         # Main container
@@ -146,8 +153,7 @@ class StudyTimer:
         ttk.Button(
             frame,
             text="Update Goals",
-            command=self.update_goals,
-            style='Accent.TButton'
+            command=self.update_goals
         ).grid(row=2, column=0, columnspan=2, pady=5)
 
     def create_stats_display(self, parent):
@@ -187,45 +193,47 @@ class StudyTimer:
         ).pack(side=tk.LEFT, padx=2)
 
     def create_analytics_display(self, parent):
-     notebook = ttk.Notebook(parent)
-     notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        notebook = ttk.Notebook(parent)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-    # Trend Analysis Tab
-     trend_frame = ttk.Frame(notebook)
-     trend_fig = self.analytics.create_study_trends_plot()
-     trend_canvas = FigureCanvasTkAgg(trend_fig, master=trend_frame)
-     trend_canvas.draw()
-     trend_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-     notebook.add(trend_frame, text="Study Trends")
+        # Trend Analysis Tab
+        self.trend_frame = ttk.Frame(notebook)
+        self.trend_fig = self.analytics.create_study_trends_plot()
+        self.trend_canvas = FigureCanvasTkAgg(self.trend_fig, master=self.trend_frame)
+        self.trend_canvas.draw()
+        self.trend_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        notebook.add(self.trend_frame, text="Study Trends")
 
-    # Productivity Dashboard Tab
-     dashboard_frame = ttk.Frame(notebook)
-     dashboard_fig = self.analytics.create_productivity_dashboard()
-     dashboard_canvas = FigureCanvasTkAgg(dashboard_fig, master=dashboard_frame)
-     dashboard_canvas.draw()
-     dashboard_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-     notebook.add(dashboard_frame, text="Productivity Dashboard")
+        # Productivity Dashboard Tab
+        self.dashboard_frame = ttk.Frame(notebook)
+        self.dashboard_fig = self.analytics.create_productivity_dashboard()
+        self.dashboard_canvas = FigureCanvasTkAgg(self.dashboard_fig, master=self.dashboard_frame)
+        self.dashboard_canvas.draw()
+        self.dashboard_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        notebook.add(self.dashboard_frame, text="Productivity Dashboard")
 
-    # Store references
-     self.trend_frame = trend_frame
-     self.dashboard_frame = dashboard_frame
+        # Refresh button
+        refresh_btn = ttk.Button(
+            parent,
+            text="Refresh Dashboards",
+            command=self.update_dashboards
+        )
+        refresh_btn.pack(pady=10)
 
-    # Refresh button
-     refresh_btn = ttk.Button(
-         parent,
-        text="Refresh Dashboards",
-        command=self.update_dashboards
-     )
-     refresh_btn.pack(pady=10)
+    def update_dashboards(self):
+        # Update trend plot
+        self.trend_fig = self.analytics.create_study_trends_plot()
+        self.trend_canvas.get_tk_widget().destroy()
+        self.trend_canvas = FigureCanvasTkAgg(self.trend_fig, master=self.trend_frame)
+        self.trend_canvas.draw()
+        self.trend_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-def update_dashboards(self):
-    # Destroy old canvases
-    for frame in [self.trend_frame, self.dashboard_frame]:
-        for widget in frame.winfo_children():
-            widget.destroy()
-    
-    # Redraw updated figures
-    self.create_analytics_display(self.right_panel)
+        # Update dashboard
+        self.dashboard_fig = self.analytics.create_productivity_dashboard()
+        self.dashboard_canvas.get_tk_widget().destroy()
+        self.dashboard_canvas = FigureCanvasTkAgg(self.dashboard_fig, master=self.dashboard_frame)
+        self.dashboard_canvas.draw()
+        self.dashboard_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
     def load_initial_values(self):
         goals = self.db.get_current_goals()
@@ -250,7 +258,7 @@ def update_dashboards(self):
         except Exception as e:
             messagebox.showerror("Weather Error", f"Failed to update weather: {str(e)}")
         
-        self.root.after(300000, self.update_weather)  # Update every 5 minutes
+        self.root.after(300000, self.update_weather)
 
     def update_goals(self):
         try:
@@ -318,7 +326,7 @@ def update_dashboards(self):
                 )
                 messagebox.showinfo("Saved", "Study session saved successfully")
                 self.update_stats()
-                self.update_dashboard()
+                self.update_dashboards()
                 self.update_progress()
             except ValidationError as e:
                 messagebox.showerror("Validation Error", str(e))
@@ -332,12 +340,6 @@ def update_dashboards(self):
         hours = total_time // 3600
         minutes = (total_time % 3600) // 60
         self.stats_label.config(text=f"Total Study Time: {hours}h {minutes}m")
-
-    def update_dashboard(self):
-        self.trend_figure.data = []
-        self.trend_figure.add_traces(self.analytics.create_study_trends_plot().data)
-        self.dashboard_figure.data = []
-        self.dashboard_figure.add_traces(self.analytics.create_productivity_dashboard().data)
 
     def export_data(self, format_type):
         try:
