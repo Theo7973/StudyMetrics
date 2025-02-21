@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import matplotlib
-matplotlib.use('TkAgg')  # Set backend before other imports
+matplotlib.use('TkAgg')
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 from database import DatabaseManager
 from api_service import WeatherService
@@ -25,6 +25,15 @@ class StudyTimer:
         self.weather_service = WeatherService()
         self.analytics = EnhancedAnalytics(self.db)
         self.exporter = DataExporter(self.db)
+
+        # Theme configuration
+        self.current_theme = 'light'
+        self.theme_colors = {
+            'light': {'bg': '#F0F0F0', 'fg': '#000000', 'plot_bg': 'white'},
+            'dark': {'bg': '#2D2D2D', 'fg': '#FFFFFF', 'plot_bg': '#404040'}
+        }
+        self.style = ttk.Style()
+        self._apply_theme()
 
         # Application state
         self.time_elapsed = 0
@@ -58,6 +67,7 @@ class StudyTimer:
         right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         # Left panel components
+        self._create_theme_switcher(left_panel)
         self.create_subject_selector(left_panel)
         self.create_timer_controls(left_panel)
         self.create_weather_display(left_panel)
@@ -67,6 +77,38 @@ class StudyTimer:
 
         # Right panel components
         self.create_analytics_display(right_panel)
+
+    def _apply_theme(self):
+        theme = self.theme_colors[self.current_theme]
+        self.style.theme_use('clam')
+        self.style.configure('.', 
+                           background=theme['bg'],
+                           foreground=theme['fg'],
+                           fieldbackground=theme['bg'])
+        
+        # Widget-specific styling
+        self.style.configure('TLabel', background=theme['bg'], foreground=theme['fg'])
+        self.style.configure('TFrame', background=theme['bg'])
+        self.style.configure('TButton', padding=6)
+        self.style.configure('TLabelframe', background=theme['bg'], bordercolor=theme['fg'])
+        self.style.configure('TLabelframe.Label', background=theme['bg'], foreground=theme['fg'])
+        
+        # Update plot styles
+        plt.style.use('ggplot' if self.current_theme == 'light' else 'dark_background')
+        self.root.configure(bg=theme['bg'])
+
+    def _create_theme_switcher(self, parent):
+        theme_frame = ttk.Frame(parent)
+        theme_frame.pack(pady=10, fill=tk.X)
+        
+        ttk.Label(theme_frame, text="Theme:").pack(side=tk.LEFT, padx=5)
+        self.theme_var = tk.StringVar(value=self.current_theme.capitalize())
+        ttk.Combobox(theme_frame, 
+                    textvariable=self.theme_var,
+                    values=['Light', 'Dark'],
+                    state='readonly',
+                    width=8).pack(side=tk.LEFT)
+        self.theme_var.trace('w', self._change_theme)
 
     def create_subject_selector(self, parent):
         frame = ttk.LabelFrame(parent, text="Study Subject", padding=10)
@@ -94,10 +136,19 @@ class StudyTimer:
         )
         self.timer_display.pack(pady=10)
 
+        # Preset buttons
+        preset_frame = ttk.Frame(frame)
+        preset_frame.pack(pady=5)
+        presets = [5, 15, 25, 45]
+        for mins in presets:
+            ttk.Button(preset_frame, 
+                      text=f"{mins} min",
+                      command=lambda m=mins: self._apply_preset(m),
+                      width=7).pack(side=tk.LEFT, padx=2)
+
         # Control buttons
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(pady=5)
-
         self.start_btn = ttk.Button(
             btn_frame,
             text="Start",
@@ -105,7 +156,6 @@ class StudyTimer:
             width=10
         )
         self.start_btn.pack(side=tk.LEFT, padx=5)
-
         ttk.Button(
             btn_frame,
             text="Reset",
@@ -198,42 +248,71 @@ class StudyTimer:
 
         # Trend Analysis Tab
         self.trend_frame = ttk.Frame(notebook)
-        self.trend_fig = self.analytics.create_study_trends_plot()
-        self.trend_canvas = FigureCanvasTkAgg(self.trend_fig, master=self.trend_frame)
-        self.trend_canvas.draw()
-        self.trend_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self._update_trend_plot()
         notebook.add(self.trend_frame, text="Study Trends")
 
         # Productivity Dashboard Tab
         self.dashboard_frame = ttk.Frame(notebook)
-        self.dashboard_fig = self.analytics.create_productivity_dashboard()
-        self.dashboard_canvas = FigureCanvasTkAgg(self.dashboard_fig, master=self.dashboard_frame)
-        self.dashboard_canvas.draw()
-        self.dashboard_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self._update_dashboard()
         notebook.add(self.dashboard_frame, text="Productivity Dashboard")
 
         # Refresh button
-        refresh_btn = ttk.Button(
+        ttk.Button(
             parent,
             text="Refresh Dashboards",
             command=self.update_dashboards
-        )
-        refresh_btn.pack(pady=10)
+        ).pack(pady=10)
 
-    def update_dashboards(self):
-        # Update trend plot
+    def _update_trend_plot(self):
+        if self.trend_canvas:
+            self.trend_canvas.get_tk_widget().destroy()
+            
         self.trend_fig = self.analytics.create_study_trends_plot()
-        self.trend_canvas.get_tk_widget().destroy()
+        self.trend_fig.patch.set_facecolor(self.theme_colors[self.current_theme]['plot_bg'])
+        
         self.trend_canvas = FigureCanvasTkAgg(self.trend_fig, master=self.trend_frame)
         self.trend_canvas.draw()
         self.trend_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        NavigationToolbar2Tk(self.trend_canvas, self.trend_frame)
 
-        # Update dashboard
+    def _update_dashboard(self):
+        if self.dashboard_canvas:
+            self.dashboard_canvas.get_tk_widget().destroy()
+            
         self.dashboard_fig = self.analytics.create_productivity_dashboard()
-        self.dashboard_canvas.get_tk_widget().destroy()
+        self.dashboard_fig.patch.set_facecolor(self.theme_colors[self.current_theme]['plot_bg'])
+        
         self.dashboard_canvas = FigureCanvasTkAgg(self.dashboard_fig, master=self.dashboard_frame)
         self.dashboard_canvas.draw()
         self.dashboard_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        NavigationToolbar2Tk(self.dashboard_canvas, self.dashboard_frame)
+
+    def _change_theme(self, *args):
+        new_theme = self.theme_var.get().lower()
+        if new_theme != self.current_theme:
+            self.current_theme = new_theme
+            self._apply_theme()
+            self.update_dashboards()
+
+    def _apply_preset(self, minutes):
+        if messagebox.askyesno("Confirm", f"Log {minutes} minute session?"):
+            try:
+                duration = minutes * 60
+                validate_study_session(duration, self.subject_var.get())
+                self.db.save_session(
+                    duration=duration,
+                    subject=self.subject_var.get(),
+                    weather=self.current_weather['condition'] if self.current_weather else "Unknown"
+                )
+                self.update_stats()
+                self.update_dashboards()
+                self.update_progress()
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+    def update_dashboards(self):
+        self._update_trend_plot()
+        self._update_dashboard()
 
     def load_initial_values(self):
         goals = self.db.get_current_goals()
@@ -275,14 +354,12 @@ class StudyTimer:
         daily_study = self.db.get_daily_study_time()
         weekly_study = self.db.get_weekly_study_time()
 
-        # Daily progress
         if goals['daily'] > 0:
             daily_percent = (daily_study / goals['daily']) * 100
             self.goal_progress['daily']['value'] = min(daily_percent, 100)
         else:
             self.goal_progress['daily']['value'] = 0
 
-        # Weekly progress
         if goals['weekly'] > 0:
             weekly_percent = (weekly_study / goals['weekly']) * 100
             self.goal_progress['weekly']['value'] = min(weekly_percent, 100)

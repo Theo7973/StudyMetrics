@@ -28,6 +28,7 @@
     <Compile Include="database.py" />
     <Compile Include="data_exporter.py" />
     <Compile Include="error_handler.py" />
+    <Compile Include="hook-matplotlib.py" />
     <Compile Include="main.py" />
   </ItemGroup>
   <ItemGroup>
