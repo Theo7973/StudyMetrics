@@ -241,7 +241,7 @@ class StudyTimer:
                                            font=self.style.FONTS['body'], width=8)
         self.daily_goal_entry.pack(side=tk.RIGHT)
 
-        # Weekly goal
+        # Weekly goa
         weekly_frame = tk.Frame(card, bg=self.style.COLORS['card_bg'])
         weekly_frame.pack(fill=tk.X, pady=10)
         ttk.Label(weekly_frame, text="Weekly (hrs):", font=self.style.FONTS['body'],
