@@ -52,7 +52,7 @@ class ModernStyle:
             'card_bg': '#FFFFFF'
         }
     }
-    
+     
     def __init__(self, theme='default'):
         self.set_theme(theme)
         
