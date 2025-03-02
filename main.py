@@ -15,7 +15,7 @@ from api_service import WeatherService
 from analytics import EnhancedAnalytics
 from data_exporter import DataExporter
 from error_handler import validate_study_session, ValidationError
-
+ 
 class ModernStyle:
     THEMES = {
         'default': {
